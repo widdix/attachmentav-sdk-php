@@ -1,27 +1,26 @@
 name: Release
 
 # Push a tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) to publish a release.
-# Packagist picks up new tags via the GitHub webhook; this workflow verifies the release, creates the
-# GitHub Release, and asks Packagist to update right away.
+# Packagist picks up new tags via the GitHub webhook; this workflow verifies the release, runs all tests,
+# creates the GitHub Release, and asks Packagist to update right away.
 
 on:
   push:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  check:
+    name: Check version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: json, openssl
           coverage: none
-
       - name: Check that the tag matches AttachmentAVApi::VERSION
         run: |
           version=$(php -r 'require "src/AttachmentAVApi.php"; echo AttachmentAV\AttachmentAVApi::VERSION;')
@@ -29,11 +28,22 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match AttachmentAVApi::VERSION ($version)."
             exit 1
           fi
-
       - run: composer validate --strict --no-check-lock
-      - run: composer update --no-interaction --no-progress
-      - run: vendor/bin/phpunit
-      - run: vendor/bin/phpunit --testsuite laravel
+
+  # All tests: unit tests on PHP 8.0-8.5, Laravel tests, and integration tests against the attachmentAV API.
+  tests:
+    needs: check
+    uses: ./.github/workflows/tests.yml
+    secrets:
+      ATTACHMENTAV_API_KEY: ${{ secrets.ATTACHMENTAV_API_KEY }}
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Create GitHub Release
         env:

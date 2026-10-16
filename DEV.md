@@ -38,4 +38,4 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The [Release workflow](.github/workflows/release.yml) checks that the tag matches `AttachmentAVApi::VERSION`, runs the tests, creates the GitHub Release, and asks Packagist to update. That last step only runs if the `PACKAGIST_USERNAME` and `PACKAGIST_TOKEN` secrets are set.
+The [Release workflow](.github/workflows/release.yml) checks that the tag matches `AttachmentAVApi::VERSION`, runs all tests (the same [Tests workflow](.github/workflows/tests.yml) as for `main`, including the integration tests), creates the GitHub Release, and asks Packagist to update. That last step only runs if the `PACKAGIST_USERNAME` and `PACKAGIST_TOKEN` secrets are set.

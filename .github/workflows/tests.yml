@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: '0 6 * * *' # daily, detects API changes
   workflow_dispatch:
+  # Called by the release workflow, so a release runs exactly the same tests.
+  workflow_call:
+    secrets:
+      ATTACHMENTAV_API_KEY:
+        required: true
 
 jobs:
   tests:
