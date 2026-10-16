@@ -22,6 +22,9 @@ final class Configuration
     public const DEFAULT_MAX_RETRIES = 3;
     public const DEFAULT_RETRY_DELAY_MS = 500;
 
+    /** Sync scans may take up to 60 seconds, so the client timeout must be a bit longer. */
+    public const DEFAULT_TIMEOUT = 65.0;
+
     private string $deployment;
 
     private string $apiKey;
@@ -33,6 +36,8 @@ final class Configuration
     private int $maxRetries = self::DEFAULT_MAX_RETRIES;
 
     private int $retryDelayMs = self::DEFAULT_RETRY_DELAY_MS;
+
+    private float $timeout = self::DEFAULT_TIMEOUT;
 
     /** @var array<string, string> */
     private array $defaultHeaders = [];
@@ -77,21 +82,30 @@ final class Configuration
      * Create a configuration from an array, e.g. the Laravel config file or Symfony parameters.
      *
      * Supported keys: `deployment` (`saas` or `self-hosted`), `api_key`, `region` (SaaS only),
-     * `base_url` (required for self-hosted, optional override for SaaS), `max_retries`, `retry_delay_ms`.
+     * `base_url` (required for self-hosted, optional override for SaaS), `max_retries`, `retry_delay_ms`, `timeout`.
+     * Empty strings (e.g. environment variables that are set but blank) are treated like missing values.
      *
      * @param array<string, mixed> $config
      */
     public static function fromArray(array $config): self
     {
-        $deployment = (string) ($config['deployment'] ?? self::DEPLOYMENT_SAAS);
-        $apiKey = (string) ($config['api_key'] ?? '');
-        $baseUrl = isset($config['base_url']) && $config['base_url'] !== '' ? (string) $config['base_url'] : null;
+        $value = static function (string $key) use ($config): ?string {
+            if (!isset($config[$key]) || !is_scalar($config[$key])) {
+                return null;
+            }
+            $value = trim((string) $config[$key]);
+
+            return $value === '' ? null : $value;
+        };
+        $deployment = $value('deployment') ?? self::DEPLOYMENT_SAAS;
+        $apiKey = $value('api_key') ?? '';
+        $baseUrl = $value('base_url');
 
         switch ($deployment) {
             case self::DEPLOYMENT_SAAS:
-                $configuration = self::saas($apiKey, (string) ($config['region'] ?? Region::EU));
+                $configuration = self::saas($apiKey, $value('region') ?? Region::EU);
                 if ($baseUrl !== null) {
-                    $configuration->baseUrl = rtrim($baseUrl, '/');
+                    $configuration->baseUrl = self::assertAbsoluteUrl($baseUrl);
                 }
                 break;
             case self::DEPLOYMENT_SELF_HOSTED:
@@ -109,11 +123,14 @@ final class Configuration
                 ));
         }
 
-        if (isset($config['max_retries'])) {
-            $configuration = $configuration->withMaxRetries((int) $config['max_retries']);
+        if ($value('max_retries') !== null) {
+            $configuration = $configuration->withMaxRetries((int) $value('max_retries'));
         }
-        if (isset($config['retry_delay_ms'])) {
-            $configuration = $configuration->withRetryDelayMs((int) $config['retry_delay_ms']);
+        if ($value('retry_delay_ms') !== null) {
+            $configuration = $configuration->withRetryDelayMs((int) $value('retry_delay_ms'));
+        }
+        if ($value('timeout') !== null) {
+            $configuration = $configuration->withTimeout((float) $value('timeout'));
         }
 
         return $configuration;
@@ -144,6 +161,21 @@ final class Configuration
         }
         $clone = clone $this;
         $clone->retryDelayMs = $retryDelayMs;
+
+        return $clone;
+    }
+
+    /**
+     * Request timeout in seconds, applied when the SDK creates the HTTP client (Guzzle or Symfony HttpClient).
+     * When you pass your own PSR-18 client, configure the timeout on that client.
+     */
+    public function withTimeout(float $timeout): self
+    {
+        if ($timeout <= 0) {
+            throw new InvalidArgumentException('The timeout must be greater than 0.');
+        }
+        $clone = clone $this;
+        $clone->timeout = $timeout;
 
         return $clone;
     }
@@ -204,6 +236,11 @@ final class Configuration
         return $this->retryDelayMs;
     }
 
+    public function getTimeout(): float
+    {
+        return $this->timeout;
+    }
+
     /**
      * @return array<string, string>
      */
@@ -236,11 +273,21 @@ final class Configuration
         if ($parts === false || !isset($parts['host'])) {
             throw new InvalidArgumentException(sprintf('Invalid base URL "%s".', $baseUrl));
         }
-        $baseUrl = rtrim($baseUrl, '/');
+        $baseUrl = self::assertAbsoluteUrl($baseUrl);
         if (!isset($parts['path']) || trim($parts['path'], '/') === '') {
             $baseUrl .= '/api/v1';
         }
 
         return $baseUrl;
+    }
+
+    private static function assertAbsoluteUrl(string $url): string
+    {
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+        if (($scheme !== 'http' && $scheme !== 'https') || parse_url($url, PHP_URL_HOST) === null) {
+            throw new InvalidArgumentException(sprintf('The base URL must be an absolute HTTP(S) URL, "%s" given.', $url));
+        }
+
+        return rtrim($url, '/');
     }
 }

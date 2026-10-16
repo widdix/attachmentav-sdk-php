@@ -23,6 +23,7 @@ The image creates a fresh Laravel project, installs the SDK from this repository
 
 * [`app/Http/Controllers/ScanController.php`](app/Http/Controllers/ScanController.php): validates the upload and calls `AttachmentAVApi::scanSyncFile()`. The SDK is injected by the auto-discovered service provider.
 * [`routes/web.php`](routes/web.php): the routes for the form and the upload.
+* [`app/Providers/AppServiceProvider.php`](app/Providers/AppServiceProvider.php): shows a message instead of an error page when an upload is larger than PHP's `post_max_size`.
 * [`resources/views/scan.blade.php`](resources/views/scan.blade.php): the upload form and the scan result.
 
 To reject infected uploads during validation instead, use the `VirusFree` rule: `'file' => ['required', 'file', 'max:10240', new VirusFree()]`.

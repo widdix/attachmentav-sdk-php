@@ -105,7 +105,7 @@ final class CallbackFailure implements \JsonSerializable
     {
         return [
             'id' => $this->id,
-            'time' => $this->time !== null ? $this->time->format('Y-m-d\TH:i:s\Z') : null,
+            'time' => $this->time !== null ? $this->time->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z') : null,
             'download_url' => $this->downloadUrl,
             'callback_url' => $this->callbackUrl,
             'error_json' => $this->errorJson,

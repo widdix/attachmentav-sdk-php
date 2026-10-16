@@ -31,19 +31,9 @@ class AttachmentAVServiceProvider extends ServiceProvider
             return Configuration::fromArray($config);
         });
 
+        // The SDK creates a Guzzle client with the configured timeout (Guzzle ships with Laravel).
         $this->app->singleton(AttachmentAVApi::class, static function (Container $app): AttachmentAVApi {
-            /** @var array<string, mixed> $config */
-            $config = $app->make('config')->get('attachmentav', []);
-            $httpClient = null;
-            if (class_exists(\GuzzleHttp\Client::class)) {
-                $httpClient = new \GuzzleHttp\Client([
-                    'timeout' => (float) ($config['timeout'] ?? 65),
-                    'connect_timeout' => 10,
-                    'http_errors' => false,
-                ]);
-            }
-
-            return new AttachmentAVApi($app->make(Configuration::class), $httpClient);
+            return new AttachmentAVApi($app->make(Configuration::class));
         });
         $this->app->alias(AttachmentAVApi::class, 'attachmentav');
 

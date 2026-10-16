@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Compatible with PHPUnit 9.6 (PHP 8.0/8.1), 10.5 and 11.5. -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
@@ -7,20 +8,19 @@
          failOnWarning="true"
          defaultTestSuite="unit">
     <testsuites>
+        <!-- Framework-agnostic SDK, no network access. -->
         <testsuite name="unit">
             <directory>tests</directory>
             <exclude>tests/Integration</exclude>
+            <exclude>tests/Laravel</exclude>
         </testsuite>
+        <!-- Laravel integration, requires orchestra/testbench (Laravel 11+, PHP 8.2+). -->
+        <testsuite name="laravel">
+            <directory>tests/Laravel</directory>
+        </testsuite>
+        <!-- Real requests against the attachmentAV API (SaaS), requires ATTACHMENTAV_API_KEY. -->
         <testsuite name="integration">
             <directory>tests/Integration</directory>
         </testsuite>
     </testsuites>
-    <coverage>
-        <include>
-            <directory suffix=".php">src</directory>
-        </include>
-        <exclude>
-            <directory>src/Laravel</directory>
-        </exclude>
-    </coverage>
 </phpunit>

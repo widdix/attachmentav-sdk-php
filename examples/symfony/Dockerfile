@@ -3,7 +3,7 @@ FROM php:8.4-cli
 
 RUN apt-get update && apt-get install -y --no-install-recommends git unzip \
     && rm -rf /var/lib/apt/lists/* \
-    && printf "upload_max_filesize=10M\npost_max_size=12M\n" > /usr/local/etc/php/conf.d/uploads.ini
+    && printf "upload_max_filesize=10M\npost_max_size=12M\ndisplay_errors=Off\nlog_errors=On\n" > /usr/local/etc/php/conf.d/uploads.ini
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # The SDK from this repository. Once published, `composer require attachmentav/virus-scan-sdk` is enough.

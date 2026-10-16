@@ -26,6 +26,11 @@ class ScanController extends AbstractController
             return $this->render('scan.html.twig');
         }
 
+        // PHP discards the whole request body if it exceeds post_max_size, including the CSRF token.
+        if ($request->request->count() === 0 && $request->files->count() === 0 && (int) $request->server->get('CONTENT_LENGTH') > 0) {
+            return $this->render('scan.html.twig', ['error' => 'The file must not be larger than 10 MB.'], new Response('', 413));
+        }
+
         if (!$this->isCsrfTokenValid('scan', (string) $request->request->get('_token'))) {
             return $this->render('scan.html.twig', ['error' => 'Invalid CSRF token, please try again.'], new Response('', 400));
         }

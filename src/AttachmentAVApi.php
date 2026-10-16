@@ -37,6 +37,9 @@ class AttachmentAVApi
 {
     public const VERSION = '1.0.0';
 
+    /** Retries are given up if the API asks to wait longer than this (Retry-After). */
+    public const MAX_RETRY_DELAY_MS = 30000;
+
     private Configuration $configuration;
 
     private ClientInterface $httpClient;
@@ -55,12 +58,38 @@ class AttachmentAVApi
         ?StreamFactoryInterface $streamFactory = null
     ) {
         $this->configuration = $configuration;
-        $this->httpClient = $httpClient ?? Psr18ClientDiscovery::find();
+        $this->httpClient = $httpClient ?? self::createDefaultHttpClient($configuration);
         $this->requestFactory = $requestFactory ?? Psr17FactoryDiscovery::findRequestFactory();
         $this->streamFactory = $streamFactory ?? Psr17FactoryDiscovery::findStreamFactory();
         $this->sleeper = static function (int $milliseconds): void {
             usleep($milliseconds * 1000);
         };
+    }
+
+    /**
+     * Create an HTTP client with the timeout of the configuration. Guzzle and Symfony HttpClient are configured
+     * directly; any other PSR-18 client is discovered and uses its own default timeout.
+     */
+    private static function createDefaultHttpClient(Configuration $configuration): ClientInterface
+    {
+        $timeout = $configuration->getTimeout();
+        if (class_exists(\GuzzleHttp\Client::class)) {
+            return new \GuzzleHttp\Client([
+                'timeout' => $timeout,
+                'connect_timeout' => min(10.0, $timeout),
+            ]);
+        }
+        if (class_exists(\Symfony\Component\HttpClient\Psr18Client::class)) {
+            try {
+                return new \Symfony\Component\HttpClient\Psr18Client(
+                    \Symfony\Component\HttpClient\HttpClient::create(['timeout' => $timeout, 'max_duration' => $timeout])
+                );
+            } catch (\LogicException $e) {
+                // No PSR-17 implementation for Symfony's Psr18Client, fall back to discovery.
+            }
+        }
+
+        return Psr18ClientDiscovery::find();
     }
 
     /**
@@ -176,6 +205,8 @@ class AttachmentAVApi
      * @param array<string, string> $callbackHeaders Headers to send when invoking the callback.
      * @param string|null           $traceId         ID to trace the scan job; required for polling.
      * @param string|null           $customData      Custom data that attachmentAV passes through (max. 16 KB).
+     *
+     * @return string|null The URL to poll for the scan result (`Location` header), null when a callback URL is used.
      */
     public function scanAsyncDownload(
         string $downloadUrl,
@@ -184,14 +215,14 @@ class AttachmentAVApi
         array $callbackHeaders = [],
         ?string $traceId = null,
         ?string $customData = null
-    ): void {
+    ): ?string {
         $body = ['download_url' => $this->assertUrl($downloadUrl, 'download URL')];
         if ($downloadHeaders !== []) {
             $body['download_headers'] = $this->assertHeaders($downloadHeaders);
         }
         $body += $this->asyncBody($callbackUrl, $callbackHeaders, $traceId, $customData);
 
-        $this->sendJson('POST', '/scan/async/download', $body);
+        return $this->locationOf($this->sendJson('POST', '/scan/async/download', $body));
     }
 
     /**
@@ -205,6 +236,8 @@ class AttachmentAVApi
      * @param array<string, string> $callbackHeaders Headers to send when invoking the callback.
      * @param string|null           $traceId         ID to trace the scan job; required for polling.
      * @param string|null           $customData      Custom data that attachmentAV passes through (max. 16 KB).
+     *
+     * @return string|null The URL to poll for the scan result (`Location` header), null when a callback URL is used.
      */
     public function scanAsyncS3(
         string $bucket,
@@ -214,11 +247,11 @@ class AttachmentAVApi
         array $callbackHeaders = [],
         ?string $traceId = null,
         ?string $customData = null
-    ): void {
+    ): ?string {
         $body = $this->s3Body($bucket, $key, $version);
         $body += $this->asyncBody($callbackUrl, $callbackHeaders, $traceId, $customData);
 
-        $this->sendJson('POST', '/scan/async/s3', $body);
+        return $this->locationOf($this->sendJson('POST', '/scan/async/s3', $body));
     }
 
     /**
@@ -311,7 +344,11 @@ class AttachmentAVApi
      */
     private function sendJson(string $method, string $path, array $body): ResponseInterface
     {
-        $json = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        try {
+            $json = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new InvalidArgumentException('The request cannot be encoded as JSON (strings must be valid UTF-8): ' . $e->getMessage(), 0, $e);
+        }
         $request = $this->createRequest($method, $path)
             ->withHeader('Content-Type', 'application/json')
             ->withBody($this->streamFactory->createStream($json));
@@ -335,10 +372,11 @@ class AttachmentAVApi
             }
 
             $exception = ApiException::fromResponse($response);
-            if (!$this->shouldRetry($exception, $request, $attempt)) {
+            $delay = $this->shouldRetry($exception, $request, $attempt) ? $this->retryDelay($attempt, $response) : null;
+            if ($delay === null) {
                 throw $exception;
             }
-            ($this->sleeper)($this->retryDelay($attempt, $response));
+            ($this->sleeper)($delay);
             $attempt++;
             $body = $request->getBody();
             if ($body->isSeekable()) {
@@ -361,15 +399,37 @@ class AttachmentAVApi
         return $body->isSeekable() || $body->getSize() === 0;
     }
 
-    private function retryDelay(int $attempt, ResponseInterface $response): int
+    /**
+     * The delay before the next attempt in milliseconds, or null to give up because the server asks to wait longer
+     * than {@see self::MAX_RETRY_DELAY_MS} (blocking a web request that long is worse than failing).
+     */
+    private function retryDelay(int $attempt, ResponseInterface $response): ?int
     {
-        $retryAfter = $response->getHeaderLine('Retry-After');
+        $retryAfter = trim($response->getHeaderLine('Retry-After'));
         if ($retryAfter !== '' && ctype_digit($retryAfter)) {
-            return (int) $retryAfter * 1000;
+            $delay = (int) $retryAfter * 1000;
+        } else {
+            $base = (int) min(self::MAX_RETRY_DELAY_MS + 1, $this->configuration->getRetryDelayMs() * (2 ** $attempt));
+            $delay = $base + random_int(0, max(0, intdiv($base, 2)));
         }
-        $base = $this->configuration->getRetryDelayMs() * (2 ** $attempt);
 
-        return $base + random_int(0, max(0, intdiv($base, 2)));
+        return $delay <= self::MAX_RETRY_DELAY_MS ? $delay : null;
+    }
+
+    private function locationOf(ResponseInterface $response): ?string
+    {
+        $location = $response->getHeaderLine('Location');
+        if ($location === '') {
+            return null;
+        }
+        // Resolve a relative Location against the host of the base URL.
+        if (parse_url($location, PHP_URL_SCHEME) === null) {
+            $parts = parse_url($this->configuration->getBaseUrl());
+            $origin = ($parts['scheme'] ?? 'https') . '://' . ($parts['host'] ?? '') . (isset($parts['port']) ? ':' . $parts['port'] : '');
+            $location = $origin . '/' . ltrim($location, '/');
+        }
+
+        return $location;
     }
 
     /**
@@ -403,7 +463,7 @@ class AttachmentAVApi
             return $content;
         }
         if (is_resource($content)) {
-            return $this->streamFactory->createStreamFromResource($content);
+            return $this->copyResource($content);
         }
         if (is_string($content)) {
             return $this->streamFactory->createStream($content);
@@ -414,6 +474,34 @@ class AttachmentAVApi
             StreamInterface::class,
             get_debug_type($content)
         ));
+    }
+
+    /**
+     * Copy a caller-owned stream resource into a temporary stream owned by the SDK. Wrapping the caller's resource
+     * directly would hand ownership to the PSR-7 stream, which closes it on destruction. The whole content is sent
+     * (seekable resources are rewound before and after copying, so the caller can keep using the resource).
+     *
+     * @param resource $resource
+     */
+    private function copyResource($resource): StreamInterface
+    {
+        if (get_resource_type($resource) !== 'stream') {
+            throw new InvalidArgumentException(sprintf('The content must be a stream resource, %s resource given.', get_resource_type($resource)));
+        }
+        $seekable = stream_get_meta_data($resource)['seekable'];
+        if ($seekable) {
+            rewind($resource);
+        }
+        $copy = fopen('php://temp/maxmemory:' . (2 * 1024 * 1024), 'w+b');
+        if ($copy === false || stream_copy_to_stream($resource, $copy) === false) {
+            throw new InvalidArgumentException('The content stream cannot be read.');
+        }
+        if ($seekable) {
+            rewind($resource);
+        }
+        rewind($copy);
+
+        return $this->streamFactory->createStreamFromResource($copy);
     }
 
     /**

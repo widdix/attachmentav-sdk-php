@@ -10,6 +10,7 @@ use AttachmentAV\Exception\AuthenticationException;
 use AttachmentAV\Exception\RateLimitException;
 use AttachmentAV\Model\ScanStatus;
 use AttachmentAV\Region;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  *
  * @group integration
  */
+#[Group('integration')]
 final class SaasIntegrationTest extends TestCase
 {
     private const DOWNLOAD_URL = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
@@ -159,16 +161,60 @@ final class SaasIntegrationTest extends TestCase
         self::assertContains($result->getStatus(), [ScanStatus::CLEAN, ScanStatus::INFECTED, ScanStatus::NO]);
     }
 
-    public function testThrottlingIsHandled(): void
+    /**
+     * Use up the burst capacity of the API key with concurrent requests (sent with Guzzle directly, not via the SDK).
+     */
+    private function exhaustBurstLimit(int $concurrency = 25): void
     {
-        // Burst a few requests; throttled requests are retried by the SDK, so none should fail with "Rate limit exceeded".
-        try {
-            for ($i = 0; $i < 8; $i++) {
-                $this->api->scanSyncBinary('burst ' . $i);
+        $client = new \GuzzleHttp\Client(['http_errors' => false, 'timeout' => 30]);
+        $requests = static function () use ($concurrency): \Generator {
+            for ($i = 0; $i < $concurrency; $i++) {
+                yield new \GuzzleHttp\Psr7\Request('GET', 'https://eu.developer.attachmentav.com/v1/test', ['x-api-key' => (string) getenv('ATTACHMENTAV_API_KEY')]);
             }
-        } catch (RateLimitException $e) {
-            self::assertTrue($e->isQuotaExceeded(), 'Throttled request was not retried: ' . $e->getMessage());
+        };
+        (new \GuzzleHttp\Pool($client, $requests(), ['concurrency' => $concurrency]))->promise()->wait();
+    }
+
+    public function testThrottledRequestThrowsRateLimitException(): void
+    {
+        $api = new AttachmentAVApi(Configuration::saas((string) getenv('ATTACHMENTAV_API_KEY'), Region::EU)->withMaxRetries(0));
+
+        $exception = null;
+        for ($round = 0; $round < 3 && $exception === null; $round++) {
+            $this->exhaustBurstLimit();
+            for ($i = 0; $i < 10; $i++) {
+                try {
+                    $api->test();
+                } catch (RateLimitException $e) {
+                    $exception = $e;
+                    break;
+                }
+            }
         }
-        $this->addToAssertionCount(1);
+
+        self::assertNotNull($exception, 'The API did not throttle the requests.');
+        self::assertSame(429, $exception->getStatusCode());
+        self::assertTrue($exception->isThrottled());
+        self::assertFalse($exception->isQuotaExceeded());
+        self::assertSame('Rate limit exceeded.', $exception->getErrorMessage());
+    }
+
+    public function testThrottledRequestIsRetried(): void
+    {
+        // More retries than the default (3) so the test does not depend on how fast the bucket refills.
+        $api = new AttachmentAVApi(Configuration::saas((string) getenv('ATTACHMENTAV_API_KEY'), Region::EU)->withMaxRetries(6));
+        // Record the retries, but really wait.
+        $delays = [];
+        $api->setSleeper(static function (int $ms) use (&$delays): void {
+            $delays[] = $ms;
+            usleep($ms * 1000);
+        });
+
+        $this->exhaustBurstLimit();
+        for ($i = 0; $i < 10 && $delays === []; $i++) {
+            self::assertTrue($api->scanSyncBinary('retried after throttling')->isClean());
+        }
+
+        self::assertNotEmpty($delays, 'The API did not throttle the requests, so no retry happened.');
     }
 }

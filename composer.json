@@ -3,7 +3,17 @@
     "description": "An SDK to integrate virus and malware scan capabilities into PHP applications. Scan files for viruses, trojans, and other kinds of malware with attachmentAV powered by Sophos.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["attachmentav", "virus", "malware", "antivirus", "scan", "sophos", "security", "laravel", "symfony"],
+    "keywords": [
+        "attachmentav",
+        "virus",
+        "malware",
+        "antivirus",
+        "scan",
+        "sophos",
+        "security",
+        "laravel",
+        "symfony"
+    ],
     "homepage": "https://attachmentav.com/solution/virus-malware-scan-api/",
     "support": {
         "docs": "https://attachmentav.com/help/virus-malware-scan-api/",
@@ -30,8 +40,10 @@
     },
     "require-dev": {
         "guzzlehttp/guzzle": "^7.5",
+        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
         "php-http/mock-client": "^1.6",
-        "phpunit/phpunit": "^9.6"
+        "phpunit/phpunit": "^9.6 || ^10.5 || ^11.5",
+        "symfony/http-client": "^5.4 || ^6.4 || ^7.0 || ^8.0"
     },
     "suggest": {
         "ext-openssl": "Required to verify the signature of callbacks (CallbackVerifier)",
@@ -66,6 +78,7 @@
     },
     "scripts": {
         "test": "phpunit",
+        "test:laravel": "phpunit --testsuite laravel",
         "test:integration": "phpunit --testsuite integration"
     },
     "minimum-stability": "stable",

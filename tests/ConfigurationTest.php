@@ -7,6 +7,7 @@ namespace AttachmentAV\Tests;
 use AttachmentAV\Configuration;
 use AttachmentAV\Exception\InvalidArgumentException;
 use AttachmentAV\Region;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 final class ConfigurationTest extends \PHPUnit\Framework\TestCase
 {
@@ -33,6 +34,7 @@ final class ConfigurationTest extends \PHPUnit\Framework\TestCase
     /**
      * @dataProvider regionProvider
      */
+    #[DataProvider('regionProvider')]
     public function testSaasRegions(string $region, string $expected): void
     {
         self::assertSame($expected, Configuration::saas('key', $region)->getBaseUrl());
@@ -66,6 +68,7 @@ final class ConfigurationTest extends \PHPUnit\Framework\TestCase
     /**
      * @dataProvider selfHostedUrlProvider
      */
+    #[DataProvider('selfHostedUrlProvider')]
     public function testSelfHosted(string $url, string $expected): void
     {
         $config = Configuration::selfHosted('key', $url);
@@ -108,6 +111,39 @@ final class ConfigurationTest extends \PHPUnit\Framework\TestCase
     {
         $this->expectException(InvalidArgumentException::class);
         Configuration::fromArray(['deployment' => 'on-prem', 'api_key' => 'key']);
+    }
+
+    public function testFromArrayTreatsBlankValuesAsMissing(): void
+    {
+        $config = Configuration::fromArray([
+            'deployment' => '',
+            'api_key' => 'key',
+            'region' => '',
+            'base_url' => ' ',
+            'max_retries' => '',
+            'timeout' => '',
+        ]);
+        self::assertTrue($config->isSaas());
+        self::assertSame('https://eu.developer.attachmentav.com/v1', $config->getBaseUrl());
+        self::assertSame(Configuration::DEFAULT_MAX_RETRIES, $config->getMaxRetries());
+        self::assertSame(Configuration::DEFAULT_TIMEOUT, $config->getTimeout());
+    }
+
+    public function testFromArrayTimeout(): void
+    {
+        self::assertSame(30.0, Configuration::fromArray(['api_key' => 'key', 'timeout' => '30'])->getTimeout());
+    }
+
+    public function testFromArrayRejectsBaseUrlWithoutScheme(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        Configuration::fromArray(['api_key' => 'key', 'base_url' => 'eu.developer.attachmentav.com/v1']);
+    }
+
+    public function testInvalidTimeout(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        Configuration::saas('key')->withTimeout(0);
     }
 
     public function testWithersAreImmutable(): void

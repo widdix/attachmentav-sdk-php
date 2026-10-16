@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AttachmentAV\Tests;
 
+use AttachmentAV\AttachmentAVApi;
 use AttachmentAV\Configuration;
 use AttachmentAV\Exception\ApiException;
 use AttachmentAV\Exception\AuthenticationException;
@@ -394,6 +395,91 @@ final class AttachmentAVApiTest extends TestCase
 
         $this->expectException(UnexpectedResponseException::class);
         $api->scanSyncBinary('x');
+    }
+
+    public function testScanSyncBinaryDoesNotCloseCallerResourceAndSendsWholeContent(): void
+    {
+        $api = $this->api();
+        $this->respond(200, ['status' => 'clean']);
+
+        $resource = fopen('php://temp', 'r+b');
+        self::assertIsResource($resource);
+        fwrite($resource, 'whole content'); // not rewound by the caller
+        $api->scanSyncBinary($resource);
+        self::assertSame('whole content', (string) $this->lastRequest()->getBody());
+
+        // Free the request and its body: the caller's resource must stay open and rewound.
+        $this->http->reset();
+        gc_collect_cycles();
+        self::assertSame('stream', get_resource_type($resource), 'The caller\'s resource was closed.');
+        self::assertSame('whole content', stream_get_contents($resource));
+        fclose($resource);
+    }
+
+    public function testInvalidUtf8IsRejectedAsInvalidArgument(): void
+    {
+        $api = $this->api();
+        $this->expectException(InvalidArgumentException::class);
+        $api->scanSyncS3('bucket', "file-\xE4.pdf");
+    }
+
+    public function testDoesNotRetryWhenRetryAfterExceedsCap(): void
+    {
+        $api = $this->api();
+        $this->respond(429, ['error' => 'Rate limit exceeded.'], ['Retry-After' => '3600']);
+
+        try {
+            $api->whoami();
+            self::fail('Expected exception');
+        } catch (RateLimitException $e) {
+            self::assertTrue($e->isThrottled());
+        }
+        self::assertSame([], $this->sleeps);
+        self::assertCount(1, $this->http->getRequests());
+    }
+
+    public function testDoesNotRetryApiGatewayQuotaExceeded(): void
+    {
+        $api = $this->api();
+        $this->respond(429, ['message' => 'Limit Exceeded']);
+
+        try {
+            $api->whoami();
+            self::fail('Expected exception');
+        } catch (RateLimitException $e) {
+            self::assertTrue($e->isQuotaExceeded());
+        }
+        self::assertCount(1, $this->http->getRequests());
+    }
+
+    public function testAsyncReturnsPollingUrl(): void
+    {
+        $api = $this->api();
+        $this->respond(201, null, ['Location' => '/v1/scan/async/result?trace_id=t-1']);
+        $this->respond(201, null, ['Location' => 'https://eu.developer.attachmentav.com/v1/scan/async/result?trace_id=t-2']);
+        $this->respond(204);
+
+        self::assertSame(
+            'https://eu.developer.attachmentav.com/v1/scan/async/result?trace_id=t-1',
+            $api->scanAsyncDownload('https://example.com/file.pdf', [], null, [], 't-1')
+        );
+        self::assertSame(
+            'https://eu.developer.attachmentav.com/v1/scan/async/result?trace_id=t-2',
+            $api->scanAsyncS3('bucket', 'key', null, null, [], 't-2')
+        );
+        self::assertNull($api->scanAsyncS3('bucket', 'key', null, 'https://app.example.com/callback'));
+    }
+
+    public function testDefaultHttpClientUsesConfiguredTimeout(): void
+    {
+        $api = new AttachmentAVApi(Configuration::saas('key')->withTimeout(12.5));
+        $property = new \ReflectionProperty($api, 'httpClient');
+        $property->setAccessible(true);
+        $client = $property->getValue($api);
+
+        self::assertInstanceOf(\GuzzleHttp\Client::class, $client);
+        self::assertSame(12.5, $client->getConfig('timeout'));
+        self::assertSame(10.0, $client->getConfig('connect_timeout'));
     }
 
     public function testDefaultHeaders(): void

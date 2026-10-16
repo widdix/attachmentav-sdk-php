@@ -1,0 +1,56 @@
+name: Release
+
+# Push a tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) to publish a release.
+# Packagist picks up new tags via the GitHub webhook; this workflow verifies the release, creates the
+# GitHub Release, and asks Packagist to update right away.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, openssl
+          coverage: none
+
+      - name: Check that the tag matches AttachmentAVApi::VERSION
+        run: |
+          version=$(php -r 'require "src/AttachmentAVApi.php"; echo AttachmentAV\AttachmentAVApi::VERSION;')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match AttachmentAVApi::VERSION ($version)."
+            exit 1
+          fi
+
+      - run: composer validate --strict --no-check-lock
+      - run: composer update --no-interaction --no-progress
+      - run: vendor/bin/phpunit
+      - run: vendor/bin/phpunit --testsuite laravel
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+
+      # Optional: set the PACKAGIST_USERNAME and PACKAGIST_TOKEN secrets (API token from
+      # https://packagist.org/profile/) to update Packagist even if the webhook is missing.
+      - name: Update Packagist
+        env:
+          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
+          PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
+        run: |
+          if [ -z "$PACKAGIST_USERNAME" ] || [ -z "$PACKAGIST_TOKEN" ]; then
+            echo "PACKAGIST_USERNAME/PACKAGIST_TOKEN not set, relying on the Packagist GitHub webhook."
+            exit 0
+          fi
+          curl --fail-with-body -sS -X POST -H 'Content-Type: application/json' \
+            "https://packagist.org/api/update-package?username=${PACKAGIST_USERNAME}&apiToken=${PACKAGIST_TOKEN}" \
+            -d '{"repository": {"url": "https://packagist.org/packages/attachmentav/virus-scan-sdk"}}'

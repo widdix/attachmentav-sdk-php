@@ -13,9 +13,15 @@ namespace AttachmentAV\Exception;
  */
 class RateLimitException extends ApiException
 {
+    /**
+     * True for `{"error": "Quota exceeded."}` and Amazon API Gateway's usage plan response `{"message": "Limit Exceeded"}`.
+     * A 429 without a recognizable message (e.g. from a proxy) is treated as throttling.
+     */
     public function isQuotaExceeded(): bool
     {
-        return stripos((string) $this->getErrorMessage(), 'quota') !== false;
+        $message = strtolower(trim((string) $this->getErrorMessage(), " \t\n\r."));
+
+        return strpos($message, 'quota') !== false || $message === 'limit exceeded';
     }
 
     public function isThrottled(): bool

@@ -9,8 +9,12 @@ use Illuminate\View\View;
 
 class ScanController extends Controller
 {
-    public function show(): View
+    public function show(Request $request): View
     {
+        if ($request->query('error') === 'too-large') {
+            return view('scan', ['error' => 'The file must not be larger than 10 MB.']);
+        }
+
         return view('scan');
     }
 

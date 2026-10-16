@@ -1,5 +1,9 @@
 # attachmentav-sdk-php
 
+[![Packagist Version](https://img.shields.io/packagist/v/attachmentav/virus-scan-sdk)](https://packagist.org/packages/attachmentav/virus-scan-sdk)
+[![PHP Version](https://img.shields.io/packagist/dependency-v/attachmentav/virus-scan-sdk/php)](https://packagist.org/packages/attachmentav/virus-scan-sdk)
+[![Tests](https://github.com/widdix/attachmentav-sdk-php/actions/workflows/tests.yml/badge.svg)](https://github.com/widdix/attachmentav-sdk-php/actions/workflows/tests.yml)
+
 An SDK to integrate virus and malware scan capabilities into PHP applications. Scan files for viruses, trojans, and other kinds of malware with [attachmentAV](https://attachmentav.com) powered by Sophos.
 
 * Supports the attachmentAV API **(SaaS)** and **(Self-hosted on AWS)**.
@@ -11,7 +15,7 @@ An SDK to integrate virus and malware scan capabilities into PHP applications. S
 
 ## Getting started
 
-First, install the package with [Composer](https://getcomposer.org/).
+First, install the package [attachmentav/virus-scan-sdk](https://packagist.org/packages/attachmentav/virus-scan-sdk) from Packagist with [Composer](https://getcomposer.org/).
 
 ```bash
 composer require attachmentav/virus-scan-sdk
@@ -105,11 +109,18 @@ use AttachmentAV\Configuration;
 $config = Configuration::saas('<API_KEY_PLACEHOLDER>')
     ->withMaxRetries(5)              // retries when requests are throttled (429), default: 3, 0 disables retries
     ->withRetryDelayMs(1000)         // base delay of the exponential backoff, default: 500 ms
+    ->withTimeout(90)                // request timeout in seconds, default: 65 (sync scans take up to 60 seconds)
     ->withDefaultHeaders(['X-Request-Id' => 'abc']);
 
-// Pass your own PSR-18 client, e.g. to configure timeouts or a proxy.
-// Sync scans take up to 60 seconds, so set the timeout to more than 60 seconds.
-$httpClient = new \GuzzleHttp\Client(['timeout' => 65, 'connect_timeout' => 10]);
+$api = new AttachmentAVApi($config);
+```
+
+If Guzzle or Symfony HttpClient is installed, the SDK creates the HTTP client with the configured timeout. If the API asks to wait longer than 30 seconds before retrying (`Retry-After`), the SDK throws a `RateLimitException` instead of blocking the request.
+
+You can also pass your own PSR-18 client, e.g. to use a proxy. In that case, configure the timeout on your client:
+
+```php
+$httpClient = new \GuzzleHttp\Client(['timeout' => 65, 'connect_timeout' => 10, 'proxy' => 'http://proxy:3128']);
 
 $api = new AttachmentAVApi($config, $httpClient);
 ```
@@ -122,8 +133,11 @@ $config = Configuration::fromArray([
     'api_key' => getenv('ATTACHMENTAV_API_KEY'),
     'region' => 'eu',                // SaaS only
     'base_url' => getenv('ATTACHMENTAV_BASE_URL'), // required for self-hosted
+    'timeout' => 65,
 ]);
 ```
+
+Empty values, such as environment variables that are set but blank, are treated as missing. So `ATTACHMENTAV_REGION=` falls back to `eu`.
 
 ## Examples
 
@@ -140,6 +154,8 @@ $result = $api->scanSyncFile('/path/to/file');
 $result = $api->scanSyncBinary(file_get_contents('/path/to/file'));
 $result = $api->scanSyncBinary(fopen('/path/to/file', 'rb'));
 ```
+
+The SDK always scans the whole content, from the start. A stream resource you pass stays open and is rewound afterwards, so you can keep using it, for example to store the file after a clean scan.
 
 Find the full example: [examples/sync-binary.php](examples/sync-binary.php)
 
@@ -193,7 +209,8 @@ $api->scanAsyncDownload(
 
 ```php
 $traceId = bin2hex(random_bytes(16));
-$api->scanAsyncDownload('https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', traceId: $traceId);
+$pollingUrl = $api->scanAsyncDownload('https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', traceId: $traceId);
+// $pollingUrl: https://eu.developer.attachmentav.com/v1/scan/async/result?trace_id=... (null when a callback URL is used)
 
 do {
     sleep(10);
@@ -336,6 +353,10 @@ $request->validate([
     'attachment' => ['required', 'file', 'max:10240', new VirusFree()],
 ]);
 ```
+
+Options:
+* `new VirusFree(allowUnscannable: true)` accepts files that attachmentAV cannot scan (status `no`), such as encrypted archives.
+* `new VirusFree(failOnError: false)` accepts files unscanned during transient errors (network errors, throttling, `5xx`). Errors that would let every file through unscanned, such as an invalid configuration, an invalid API key, or an exceeded quota, still fail validation.
 
 Use the facade, or inject `AttachmentAV\AttachmentAVApi`:
 

@@ -30,7 +30,7 @@
     @enderror
 
     @isset($error)
-        <div class="result error"><strong>{{ $filename }}</strong> could not be scanned: {{ $error }}</div>
+        <div class="result error">@isset($filename)<strong>{{ $filename }}</strong> could not be scanned: @endisset{{ $error }}</div>
     @endisset
 
     @isset($result)
