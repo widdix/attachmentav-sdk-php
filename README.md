@@ -305,6 +305,8 @@ try {
 
 ## Laravel
 
+Try it: [examples/laravel](examples/laravel) is a complete upload form you can run with `docker compose up`.
+
 Laravel registers the service provider and the `AttachmentAV` facade automatically. Add the configuration to your `.env` file:
 
 ```dotenv
@@ -366,6 +368,8 @@ Route::post('/attachmentav/callback', function (Request $request, CallbackVerifi
 ```
 
 ## Symfony
+
+Try it: [examples/symfony](examples/symfony) is a complete upload form you can run with `docker compose up`.
 
 Register the client as a service in `config/services.yaml`. If `symfony/http-client` and `nyholm/psr7` are installed, Symfony's HTTP client is used.
 

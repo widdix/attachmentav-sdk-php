@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: examples/laravel/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      ATTACHMENTAV_API_KEY: ${ATTACHMENTAV_API_KEY:?Set ATTACHMENTAV_API_KEY}
+      ATTACHMENTAV_REGION: ${ATTACHMENTAV_REGION:-eu}
+      # Self-hosted on AWS: set ATTACHMENTAV_DEPLOYMENT=self-hosted and ATTACHMENTAV_BASE_URL
+      ATTACHMENTAV_DEPLOYMENT: ${ATTACHMENTAV_DEPLOYMENT:-saas}
+      ATTACHMENTAV_BASE_URL: ${ATTACHMENTAV_BASE_URL:-}

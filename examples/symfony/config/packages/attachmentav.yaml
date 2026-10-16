@@ -1,0 +1,18 @@
+# Registers the attachmentAV SDK as a service. AttachmentAV\AttachmentAVApi can then be autowired.
+# Symfony's HTTP client (symfony/http-client + nyholm/psr7) is discovered automatically.
+services:
+    AttachmentAV\Configuration:
+        factory: ['AttachmentAV\Configuration', 'fromArray']
+        arguments:
+            - deployment: '%env(default:attachmentav_default_deployment:ATTACHMENTAV_DEPLOYMENT)%'
+              api_key: '%env(ATTACHMENTAV_API_KEY)%'
+              region: '%env(default:attachmentav_default_region:ATTACHMENTAV_REGION)%'
+              base_url: '%env(default::ATTACHMENTAV_BASE_URL)%'
+
+    AttachmentAV\AttachmentAVApi:
+        arguments:
+            $configuration: '@AttachmentAV\Configuration'
+
+parameters:
+    attachmentav_default_deployment: 'saas'
+    attachmentav_default_region: 'eu'
