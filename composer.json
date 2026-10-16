@@ -1,0 +1,73 @@
+{
+    "name": "attachmentav/virus-scan-sdk",
+    "description": "An SDK to integrate virus and malware scan capabilities into PHP applications. Scan files for viruses, trojans, and other kinds of malware with attachmentAV powered by Sophos.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["attachmentav", "virus", "malware", "antivirus", "scan", "sophos", "security", "laravel", "symfony"],
+    "homepage": "https://attachmentav.com/solution/virus-malware-scan-api/",
+    "support": {
+        "docs": "https://attachmentav.com/help/virus-malware-scan-api/",
+        "email": "hello@attachmentav.com",
+        "issues": "https://github.com/widdix/attachmentav-sdk-php/issues",
+        "source": "https://github.com/widdix/attachmentav-sdk-php"
+    },
+    "authors": [
+        {
+            "name": "widdix",
+            "email": "hello@attachmentav.com",
+            "homepage": "https://attachmentav.com"
+        }
+    ],
+    "require": {
+        "php": "^8.0",
+        "ext-json": "*",
+        "php-http/discovery": "^1.15",
+        "psr/http-client": "^1.0",
+        "psr/http-client-implementation": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/http-factory-implementation": "^1.0",
+        "psr/http-message": "^1.1 || ^2.0"
+    },
+    "require-dev": {
+        "guzzlehttp/guzzle": "^7.5",
+        "php-http/mock-client": "^1.6",
+        "phpunit/phpunit": "^9.6"
+    },
+    "suggest": {
+        "ext-openssl": "Required to verify the signature of callbacks (CallbackVerifier)",
+        "guzzlehttp/guzzle": "A PSR-18 HTTP client (already installed with Laravel)",
+        "symfony/http-client": "A PSR-18 HTTP client (requires nyholm/psr7 or another PSR-17 implementation)"
+    },
+    "autoload": {
+        "psr-4": {
+            "AttachmentAV\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AttachmentAV\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "AttachmentAV\\Laravel\\AttachmentAVServiceProvider"
+            ],
+            "aliases": {
+                "AttachmentAV": "AttachmentAV\\Laravel\\Facades\\AttachmentAV"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:integration": "phpunit --testsuite integration"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

@@ -1,0 +1,258 @@
+openapi: 3.0.0
+info:
+  description: 'An SDK to integrate virus and malware scan capabilities into Java applications. Scan files for viruses, trojans, and other kinds of malware with attachmentAV powered by Sophos.'
+  title: attachmentAV
+  version: 1.0.0
+servers:
+- url: https://eu.developer.attachmentav.com/v1
+security:
+- apiKeyAuth: []
+- bearerAuth: []
+tags:
+- name: attachmentAV
+paths:
+  /scan/sync/binary:
+    post:
+      description: 'Upload a file, scan the file, and return the scan result.'
+      tags: [attachmentAV]
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResult'
+          description: Success
+  /scan/sync/download:
+    post:
+      description: 'Download a file from a remote location (HTTP/HTTPS), scan the file, and return the scan result.'
+      tags: [ attachmentAV ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncDownloadScanRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResult'
+          description: Success
+  /scan/sync/s3:
+    post:
+      description: 'Download a file from S3, scan the file, and return the scan result. A bucket policy is required to grant attachmentAV access to the S3 objects.'
+      tags: [attachmentAV]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncS3ScanRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResult'
+          description: Success
+  /scan/async/result:
+    get:
+      description: 'Retrieve the scan result for scan job.'
+      tags: [ attachmentAV ]
+      parameters:
+      - in: query
+        name: trace_id
+        schema:
+          type: string
+        required: true
+        description: 'ID used when submitting the scan job.'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResult'
+          description: Success
+        '404':
+          description: 'Not found'
+  /scan/async/download:
+    post:
+      description: 'Download a file from a remote location (HTTP/HTTPS), scan the file, and post the scan result to your callback URL.'
+      tags: [ attachmentAV ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AsyncDownloadScanRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema:
+                type: string
+              description: 'URL to scan result for polling'
+        '204':
+          description: Success
+  /scan/async/s3:
+    post:
+      description: 'Download a file from S3, scan the file, and post the scan result to your callback URL. A bucket policy is required to grant attachmentAV access to the S3 objects.'
+      tags: [ attachmentAV ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AsyncS3ScanRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema:
+                type: string
+              description: 'URL to scan result for polling'
+        '204':
+          description: Success
+  /whoami:
+    get:
+      description: 'Get information abour yourself.'
+      tags: [attachmentAV]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Whoami'
+          description: Success
+  /usage:
+    get:
+      description: 'Get remaining credits and quota.'
+      tags: [ attachmentAV ]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usage'
+          description: Success
+components:
+  schemas:
+    Whoami:
+      properties:
+        tenantId:
+          type: string
+      required:
+      - tenantId
+    Usage:
+      properties:
+        credits:
+          type: number
+        quota:
+          type: object
+          properties:
+            limit:
+              type: number
+            period:
+              type: string
+          required:
+          - limit
+          - period
+      required:
+      - credits
+      - quota
+    ScanResult:
+      properties:
+        status:
+          type: string
+        finding:
+          type: string
+        size:
+          type: number
+        realfiletype:
+          type: string
+      required:
+      - status
+    SyncDownloadScanRequest:
+      properties:
+        download_url:
+          type: string
+          pattern: '^(?:(?:(?:https?):)?\/\/)(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\u00a1-\uffff][a-z0-9\u00a1-\uffff_-]{0,62})?[a-z0-9\u00a1-\uffff]\.)+(?:[a-z\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?(?:[/?#]\S*)?$' # https://gist.github.com/dperini/729294
+        download_headers:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+      - download_url
+    SyncS3ScanRequest:
+      properties:
+        bucket:
+          type: string
+        key:
+          type: string
+        version:
+          type: string
+      required:
+      - bucket
+      - key
+    AsyncDownloadScanRequest:
+      properties:
+        download_url:
+          type: string
+          pattern: '^(?:(?:(?:https?):)?\/\/)(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\u00a1-\uffff][a-z0-9\u00a1-\uffff_-]{0,62})?[a-z0-9\u00a1-\uffff]\.)+(?:[a-z\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?(?:[/?#]\S*)?$' # https://gist.github.com/dperini/729294
+        download_headers:
+          type: object
+          additionalProperties:
+            type: string
+        callback_url:
+          type: string
+          pattern: '^(?:(?:(?:https?):)?\/\/)(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\u00a1-\uffff][a-z0-9\u00a1-\uffff_-]{0,62})?[a-z0-9\u00a1-\uffff]\.)+(?:[a-z\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?(?:[/?#]\S*)?$' # https://gist.github.com/dperini/729294
+        callback_headers:
+          type: object
+          additionalProperties:
+            type: string
+        trace_id:
+          type: string
+        custom_data:
+          type: string
+      required:
+      - download_url
+    AsyncS3ScanRequest:
+      properties:
+        bucket:
+          type: string
+        key:
+          type: string
+        version:
+          type: string
+        callback_url:
+          type: string
+          pattern: '^(?:(?:(?:https?):)?\/\/)(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\u00a1-\uffff][a-z0-9\u00a1-\uffff_-]{0,62})?[a-z0-9\u00a1-\uffff]\.)+(?:[a-z\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?(?:[/?#]\S*)?$' # https://gist.github.com/dperini/729294
+        callback_headers:
+          type: object
+          additionalProperties:
+            type: string
+        trace_id:
+          type: string
+        custom_data:
+          type: string
+      required:
+      - bucket
+      - key
+  securitySchemes:
+    apiKeyAuth:
+      in: header
+      name: x-api-key
+      type: apiKey
+    bearerAuth:
+      type: http
+      scheme: bearer
