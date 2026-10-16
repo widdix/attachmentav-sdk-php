@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '0 6 * * *' # daily, detects API changes
+  workflow_dispatch:
 
 jobs:
   tests:
@@ -22,3 +25,31 @@ jobs:
           coverage: none
       - run: composer update --no-interaction --no-progress
       - run: vendor/bin/phpunit
+
+  integration:
+    needs: tests
+    # Secrets are not available to pull requests from forks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    # Avoid parallel runs competing for the throttling limit of the API key.
+    concurrency:
+      group: integration-tests
+      cancel-in-progress: false
+    name: Integration (SaaS, EU)
+    env:
+      ATTACHMENTAV_API_KEY: ${{ secrets.ATTACHMENTAV_API_KEY }}
+    steps:
+      - name: Check API key
+        run: |
+          if [ -z "$ATTACHMENTAV_API_KEY" ]; then
+            echo "::error::The ATTACHMENTAV_API_KEY secret is not set."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, openssl
+          coverage: none
+      - run: composer update --no-interaction --no-progress
+      - run: vendor/bin/phpunit --testsuite integration --testdox
