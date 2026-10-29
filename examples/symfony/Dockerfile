@@ -3,7 +3,7 @@ FROM php:8.4-cli
 
 RUN apt-get update && apt-get install -y --no-install-recommends git unzip \
     && rm -rf /var/lib/apt/lists/* \
-    && printf "upload_max_filesize=10M\npost_max_size=12M\ndisplay_errors=Off\nlog_errors=On\n" > /usr/local/etc/php/conf.d/uploads.ini
+    && printf "upload_max_filesize=100M\npost_max_size=105M\ndisplay_errors=Off\nlog_errors=On\n" > /usr/local/etc/php/conf.d/uploads.ini
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # The SDK from this repository. Once published, `composer require attachmentav/virus-scan-sdk` is enough.
@@ -24,7 +24,9 @@ COPY examples/symfony/templates templates
 COPY examples/symfony/config config
 
 ENV APP_ENV=prod
-RUN composer dump-env prod && php bin/console cache:clear
+# APP_SECRET signs the download URLs of the async scan. Generated once per image build.
+RUN echo "APP_SECRET=$(php -r 'echo bin2hex(random_bytes(16));')" > .env.prod.local \
+    && composer dump-env prod && php bin/console cache:clear
 
 EXPOSE 8000
 # PHP's built-in web server is fine for this example; use nginx/php-fpm or FrankenPHP in production.

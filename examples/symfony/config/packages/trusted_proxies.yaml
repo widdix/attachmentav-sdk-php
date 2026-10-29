@@ -1,0 +1,10 @@
+# The download and callback URLs sent to attachmentAV are generated from the incoming request.
+# Behind a tunnel such as ngrok or a reverse proxy, Symfony must trust its X-Forwarded-* headers
+# to generate the public HTTPS URLs. This example trusts whoever connects (REMOTE_ADDR), which is fine
+# locally. In production, set TRUSTED_PROXIES to the IP addresses of your proxies.
+framework:
+    trusted_proxies: '%env(default:trusted_proxies_default:TRUSTED_PROXIES)%'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port']
+
+parameters:
+    trusted_proxies_default: 'REMOTE_ADDR'

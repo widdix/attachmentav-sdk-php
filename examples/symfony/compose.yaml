@@ -11,3 +11,5 @@ services:
       # Self-hosted on AWS: set ATTACHMENTAV_DEPLOYMENT=self-hosted and ATTACHMENTAV_BASE_URL
       ATTACHMENTAV_DEPLOYMENT: ${ATTACHMENTAV_DEPLOYMENT:-saas}
       ATTACHMENTAV_BASE_URL: ${ATTACHMENTAV_BASE_URL:-}
+      # Async scans (SaaS): required to verify callbacks
+      ATTACHMENTAV_TENANT_ID: ${ATTACHMENTAV_TENANT_ID:-}
