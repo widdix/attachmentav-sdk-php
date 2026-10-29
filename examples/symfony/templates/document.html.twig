@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% if document.status == 'pending' %}<meta http-equiv="refresh" content="3">{% endif %}
+    <title>attachmentAV – Symfony example (async)</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; color: #1f2937; }
+        .result { padding: 1rem; border-radius: .5rem; border: 1px solid; }
+        .pending { background: #f3f4f6; border-color: #9ca3af; }
+        .clean { background: #ecfdf5; border-color: #10b981; }
+        .infected { background: #fef2f2; border-color: #ef4444; }
+        .no { background: #fffbeb; border-color: #f59e0b; }
+        dt { font-weight: 600; } dd { margin: 0 0 .5rem; }
+    </style>
+</head>
+<body>
+    <h1>Async virus and malware scan</h1>
+
+    <div class="result {{ document.status }}">
+        <dl>
+            <dt>File</dt><dd>{{ document.filename }}</dd>
+            <dt>Status</dt><dd>{{ document.status == 'pending' ? 'pending, waiting for the callback …' : document.status }}</dd>
+            {% if document.finding is defined and document.finding %}
+                <dt>Finding</dt><dd>{{ document.finding }}</dd>
+            {% endif %}
+            {% if document.size is defined %}
+                <dt>Size</dt><dd>{{ document.size }} bytes</dd>
+                <dt>Real file type</dt><dd>{{ document.realFileType ?? 'unknown' }}</dd>
+            {% endif %}
+        </dl>
+    </div>
+
+    <p><a href="{{ path('document_upload') }}">Upload another file</a></p>
+</body>
+</html>

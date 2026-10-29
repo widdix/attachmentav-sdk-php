@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>attachmentAV – Symfony example (async)</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; color: #1f2937; }
+        form { display: flex; gap: .5rem; align-items: center; margin: 1.5rem 0; }
+        button { padding: .4rem 1rem; cursor: pointer; }
+        .result { padding: 1rem; border-radius: .5rem; border: 1px solid; }
+        .error { background: #fffbeb; border-color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <h1>Async virus and malware scan</h1>
+    <p>Upload a file (max. 100 MB). attachmentAV downloads it from the staging directory, scans it in the background, and sends the scan result to the callback URL.</p>
+
+    <form method="post" action="{{ path('document_upload') }}" enctype="multipart/form-data">
+        <input type="hidden" name="_token" value="{{ csrf_token('documents') }}">
+        <input type="file" name="file" required>
+        <button type="submit">Upload</button>
+    </form>
+
+    {% if error is defined %}
+        <div class="result error">
+            {% if filename is defined %}<strong>{{ filename }}</strong> could not be submitted: {% endif %}{{ error }}
+        </div>
+    {% endif %}
+
+    <p><a href="{{ path('scan') }}">Sync scan</a></p>
+</body>
+</html>

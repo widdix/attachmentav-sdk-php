@@ -13,6 +13,13 @@ services:
         arguments:
             $configuration: '@AttachmentAV\Configuration'
 
+    # Verifies the signatures of callbacks (async scans). Get your tenant ID with AttachmentAVApi::whoami().
+    AttachmentAV\Callback\CallbackVerifier:
+        factory: ['AttachmentAV\Callback\CallbackVerifier', 'forRegion']
+        arguments:
+            $region: '%env(default:attachmentav_default_region:ATTACHMENTAV_REGION)%'
+            $tenantId: '%env(ATTACHMENTAV_TENANT_ID)%'
+
 parameters:
     attachmentav_default_deployment: 'saas'
     attachmentav_default_region: 'eu'
